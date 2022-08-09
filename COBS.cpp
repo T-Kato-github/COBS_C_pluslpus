@@ -1,64 +1,71 @@
-#include "Arduino.h"
 #include "COBS.hpp"
-#include <stddef.h>
-
-template void COBS::encode<int16_t>(int16_t *data,uint8_t *result_data,size_t data_len,size_t result_data_len);
-template void COBS::encode<int32_t>(int32_t *data,uint8_t *result_data,size_t data_len,size_t result_data_len);
-template void COBS::encode<uint16_t>(uint16_t *data,uint8_t *result_data,size_t data_len,size_t result_data_len);
-template void COBS::encode<uint32_t>(uint32_t *data,uint8_t *result_data,size_t data_len,size_t result_data_len);
-
-
-template void COBS::decode<int16_t>(uint8_t *data,int16_t *result_data,size_t data_len);
-template void COBS::decode<int32_t>(uint8_t *data,int32_t *result_data,size_t data_len);
-template void COBS::decode<uint16_t>(uint8_t *data,uint16_t *result_data,size_t data_len);
-template void COBS::decode<uint32_t>(uint8_t *data,uint32_t *result_data,size_t data_len);
-
-
-
-
-COBS::COBS(uint16_t data_byte){
-	this->data_byte = data_byte;
-}
-
-template <typename T> void COBS::encode(T *data,uint8_t *result_data,size_t data_len,size_t result_data_len)
+#include <stdint.h>
+#include <cmath>
+#include <iostream>
+//#include "./../DISPALY_ARR/display_array.hpp"
+COBS::COBS(int data_size,int point_digit)
 {
-	//len(result_data) == data_len * this->data_byte + 2(COBS)
-	uint16_t now_position = 0;
-	uint16_t pre_zero_position = 0;
-	
-	for(uint16_t i = now_position;i<data_len;i++){
-		for(uint16_t j = 1;j <(this->data_byte)+1;j++){
-			now_position = 2*i+j;
-			result_data[now_position] = data[i]>>(8*((this->data_byte)-j));
-			//check zero and insert zero position into result array
-			if(result_data[now_position]==0){
-				result_data[pre_zero_position] = now_position-pre_zero_position;
-				pre_zero_position = now_position;
-			}
-		}
-	}		
-	result_data[pre_zero_position] = result_data_len-1 - pre_zero_position;
-	result_data[result_data_len-1]=0;
+    this->point_digit = point_digit;
+    this->data_size = data_size;
 }
-
-template <typename T> void COBS::decode(uint8_t *data,T *result_data,size_t result_data_len)
+void COBS::encode(float const* data,int data_length,uint8_t *encoded_data)
 {
-	uint16_t zero = 0;
-	uint16_t zero_position = 0;
-	uint16_t now_position = zero_position;
-
-	//0の復元
-	do{
-		zero_position = data[zero_position]+zero_position;
-		data[now_position] = 0;
-		now_position = zero_position;
-	}while(data[zero_position] != 0);
-	//decode
-	now_position = 0;
-	for(uint16_t i = now_position;i<result_data_len;i++){
-		for(uint16_t j = 1;j < (this->data_byte)+1;++j){
-			now_position = 2*i+j;
-			result_data[i] = result_data[i] | ( ( data[now_position] | zero ) << (8*((this->data_byte)-j)) );
-		}
-	}
+    int cobs_data_length = this->data_size*data_length+2;
+    uint8_t *cobs_data = new uint8_t[cobs_data_length]();
+    int16_t *int_data = new int16_t[data_length]();
+    int i,j,index;
+    float inflation_rate = std::pow(10.0,this->point_digit);
+    //convert float data to int data.
+    for(i=0;i<data_length;++i) int_data[i] = data[i]*inflation_rate;
+    //display_array(int_data,data_length);
+    for(i=0;i<data_length;++i){
+        for(j=0;j<this->data_size;++j)cobs_data[2*i+j+1] = int_data[i]>>8*j;
+    }
+    //display_array(cobs_data,cobs_data_length);
+    //Split a int16_t datum into two uint8_t data.
+    j=1;
+    index=0;
+    for(i=1;i<cobs_data_length;++i){
+        if(cobs_data[i]==0){
+            cobs_data[index]=j;
+            index = i;
+            j=0;
+        }
+        ++j;
+    }
+    for(i=0;i<cobs_data_length;++i) encoded_data[i] = cobs_data[i];
+    //display_array(cobs_data,cobs_data_length);
+    //memory allocation
+    delete[] cobs_data;
+    delete[] int_data;
+}
+void COBS::decode(uint8_t const* data,int data_length,float *decoded_data)
+{
+    int zero_position;
+    int data_num = int((data_length-2)/this->data_size);
+    uint8_t *_data = new uint8_t[data_length]();
+    int16_t *_decoded_data = new int16_t[data_num]();
+    int i,j;
+    float inflated_rate = std::pow(10.0,-this->point_digit);
+    //deep_copy data to _data
+    for(i=0;i<data_length;++i) _data[i] = data[i];
+    //display_array(data,data_length);
+    //descript zero
+    i =data_length-1;
+    for(zero_position=0;zero_position<i;zero_position+=data[zero_position])_data[zero_position]=0;
+    //display_array(_data,data_length);
+    //Merges two uint8_t data into one int16_t datum.
+    for(i=0; i < data_num;++i)
+    {
+        for(j=0;j<this->data_size;++j)
+        {
+            _decoded_data[i] = _decoded_data[i] |  (_data[2*i+j+1]<<(8*j) );
+        }
+    }
+    //display_array(_decoded_data,data_num);
+    //deep_copy _decoded_data to decoded_data
+    for(i=0;i<data_num;++i)decoded_data[i] = _decoded_data[i]*inflated_rate;
+    //memory allocation
+    delete[] _data;
+    delete[] _decoded_data;
 }
