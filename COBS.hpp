@@ -15,9 +15,8 @@
  * @brief Class for encoding or decoding based on COBS.  
  * 
  * @tparam T 
- * When data_size is 2, T shuold be int16_t. 
- * When data_size is 4, T shuold be int32_t.
- * When data_size is 5, T should be int64_t.
+ * When data_size is 2, T shuold be int16_t(range:(32767 ~ -32768)*10^-point_digit). 
+ * When data_size is 4, T shuold be int32_t(range:(2^15-1 ~ -2^15)*10^-point_digit). 
  */
 template <class T>
 class COBS{
