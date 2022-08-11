@@ -1,1 +1,4 @@
-# COBS_C_pluslpus
+# COBS for C++
+## Abstract
+## Usage
+## History
